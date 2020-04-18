@@ -1,0 +1,15 @@
+[package]
+name = "dsp_perf"
+version = "0.1.0"
+authors = ["Magnus Hallin <mhallin@fastmail.com>"]
+edition = "2018"
+
+[[bench]]
+name = "dsp_bench"
+harness = false
+
+[dependencies]
+plotters = "0.2"
+
+[dev-dependencies]
+criterion = "0.3"
