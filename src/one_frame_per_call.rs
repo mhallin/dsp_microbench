@@ -37,11 +37,10 @@ impl OscillatorHelper {
         }
     }
 
-    // #[inline(never)]
     fn update(&mut self) {
         self.computed_frequency = self.input_frequency
             * self.input_frequency_mod_ratio
-            * pitch_shift_multiplier(
+            * 2.0f64.powf(
                 self.frequency_mod
                     + self.octave_offset * 12.0
                     + self.semitone_offset
@@ -85,16 +84,14 @@ impl BandLimitedOscillator {
         }
     }
 
-    // #[inline(never)]
     fn update(&mut self) {
         self.helper.update();
     }
 
-    // #[inline(never)]
     fn render(&mut self) -> f64 {
         self.helper.check_wrap_modulo();
 
-        let modulo = wrap_modulo(self.helper.modulo + self.helper.phase_mod);
+        let modulo = (self.helper.modulo + self.helper.phase_mod).rem_euclid(1.0);
 
         let out: f64;
 
@@ -120,12 +117,10 @@ impl LFO {
         }
     }
 
-    // #[inline(never)]
     fn update(&mut self) {
         self.helper.update();
     }
 
-    // #[inline(never)]
     fn render(&mut self) -> (f64, f64) {
         self.helper.check_wrap_modulo();
 
@@ -155,14 +150,6 @@ impl LFO {
     }
 }
 
-fn pitch_shift_multiplier(x: f64) -> f64 {
-    2.0f64.powf(x / 12.0)
-}
-
-fn wrap_modulo(x: f64) -> f64 {
-    x.rem_euclid(1.0)
-}
-
 fn parabolic_sine(x: f64) -> f64 {
     use std::f64::consts::PI;
 
@@ -178,44 +165,43 @@ fn parabolic_sine(x: f64) -> f64 {
 
 pub struct Synth {
     osc1: BandLimitedOscillator,
-    // osc2: BandLimitedOscillator,
-    // lfo: LFO,
+    osc2: BandLimitedOscillator,
+    lfo: LFO,
 }
 
 impl Synth {
     pub fn new(sample_rate: f64) -> Self {
         let mut synth = Synth {
             osc1: BandLimitedOscillator::new(sample_rate),
-            // osc2: BandLimitedOscillator::new(sample_rate),
-            // lfo: LFO::new(sample_rate),
+            osc2: BandLimitedOscillator::new(sample_rate),
+            lfo: LFO::new(sample_rate),
         };
 
         synth.osc1.helper.input_frequency = 440.0;
-        // synth.osc2.helper.input_frequency = 440.0;
+        synth.osc2.helper.input_frequency = 440.0;
         
-        // synth.osc2.helper.cent_offset = 2.5;
+        synth.osc2.helper.cent_offset = 2.5;
 
-        // synth.lfo.helper.input_frequency = 0.5;
+        synth.lfo.helper.input_frequency = 0.5;
 
         synth
     }
 
-    #[inline(never)]
     pub fn render(&mut self, buffer: &mut [f64]) {        
         for output in buffer {
-            // self.lfo.update();
-            // let (lfo_out, _) = self.lfo.render();
+            self.lfo.update();
+            let (lfo_out, _) = self.lfo.render();
 
-            // self.osc1.helper.frequency_mod = lfo_out;
+            self.osc1.helper.frequency_mod = lfo_out;
             self.osc1.update();
 
-            // self.osc2.helper.frequency_mod = lfo_out;
-            // self.osc2.update();
+            self.osc2.helper.frequency_mod = lfo_out;
+            self.osc2.update();
 
             let osc1_out = self.osc1.render();
-            // let osc2_out = self.osc2.render();
-            // *output = 0.5 * osc1_out + 0.5 * osc2_out;
-            *output = 0.5 * osc1_out;
+            let osc2_out = self.osc2.render();
+            *output = 0.5 * osc1_out + 0.5 * osc2_out;
+            // *output = osc1_out;
         }
     }
 }

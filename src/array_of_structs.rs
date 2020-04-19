@@ -1,7 +1,17 @@
 const OSC_MAX_FREQ: f64 = 20480.0;
 
 const BATCH_SIZE: usize = 64;
-type BatchData = [f64; BATCH_SIZE];
+
+#[derive(Copy, Clone)]
+struct OscillatorAudioRate {
+    pub input_frequency_mod_ratio: f64,
+    pub phase_mod: f64,
+    pub frequency_mod: f64,
+    pub modulo: f64,
+
+    pub wrap_modulo: bool,
+    pub amplitude_mod: f64,
+}
 
 struct OscillatorHelper {
     pub sample_rate: f64,
@@ -11,13 +21,7 @@ struct OscillatorHelper {
     pub cent_offset: f64,
     pub amplitude: f64,
 
-    pub input_frequency_mod_ratio: BatchData,
-    pub phase_mod: BatchData,
-    pub frequency_mod: BatchData,
-
-    pub modulo: BatchData,
-    pub wrap_modulo: [bool; BATCH_SIZE],
-    pub amplitude_mod: BatchData,
+    pub audio_rate: [OscillatorAudioRate; BATCH_SIZE],
 
     last_modulo: f64,
 }
@@ -31,12 +35,14 @@ impl OscillatorHelper {
             semitone_offset: 0.0,
             cent_offset: 0.0,
             amplitude: 1.0,
-            input_frequency_mod_ratio: [1.0; BATCH_SIZE],
-            frequency_mod: [0.0; BATCH_SIZE],
-            phase_mod: [0.0; BATCH_SIZE],
-            amplitude_mod: [1.0; BATCH_SIZE],
-            modulo: [0.0; BATCH_SIZE],
-            wrap_modulo: [false; BATCH_SIZE],
+            audio_rate: [OscillatorAudioRate {
+                input_frequency_mod_ratio: 1.0,
+                frequency_mod: 0.0,
+                phase_mod: 0.0,
+                amplitude_mod: 1.0,
+                modulo: 0.0,
+                wrap_modulo: false,
+            }; BATCH_SIZE],
             last_modulo: 0.0,
         }
     }
@@ -45,16 +51,10 @@ impl OscillatorHelper {
         let const_offset =
             self.octave_offset * 12.0 + self.semitone_offset + self.cent_offset / 100.0;
 
-        for (((out_modulo, out_wrap_modulo), input_frequency_mod_ratio), frequency_mod) in self
-            .modulo
-            .iter_mut()
-            .zip(self.wrap_modulo.iter_mut())
-            .zip(self.input_frequency_mod_ratio.iter())
-            .zip(self.frequency_mod.iter())
-        {
+        for audio_rate in self.audio_rate.iter_mut() {
             let frequency = (self.input_frequency
-                * input_frequency_mod_ratio
-                * 2.0f64.powf(frequency_mod + const_offset))
+                * audio_rate.input_frequency_mod_ratio
+                * 2.0f64.powf(audio_rate.frequency_mod + const_offset))
             .max(-OSC_MAX_FREQ)
             .min(OSC_MAX_FREQ);
 
@@ -70,8 +70,8 @@ impl OscillatorHelper {
                 false
             };
 
-            *out_modulo = self.last_modulo;
-            *out_wrap_modulo = wrap;
+            audio_rate.modulo = self.last_modulo;
+            audio_rate.wrap_modulo = wrap;
 
             self.last_modulo += phase_incr;
         }
@@ -80,7 +80,7 @@ impl OscillatorHelper {
 
 struct BandLimitedOscillator {
     helper: OscillatorHelper,
-    output: BatchData,
+    output: [f64; BATCH_SIZE],
 }
 
 impl BandLimitedOscillator {
@@ -94,50 +94,38 @@ impl BandLimitedOscillator {
     fn render(&mut self) {
         self.helper.update();
 
-        for (((output, modulo), phase_mod), amplitude_mod) in self
-            .output
-            .iter_mut()
-            .zip(self.helper.modulo.iter())
-            .zip(self.helper.phase_mod.iter())
-            .zip(self.helper.amplitude_mod.iter())
-        {
-            let modulo = (modulo + phase_mod).rem_euclid(1.0);
+        for (output, audio_rate) in self.output.iter_mut().zip(self.helper.audio_rate.iter()) {
+            let modulo = (audio_rate.modulo + audio_rate.phase_mod).rem_euclid(1.0);
             let angle = modulo * 2.0 * std::f64::consts::PI - std::f64::consts::PI;
-            *output = parabolic_sine(-angle) * self.helper.amplitude * amplitude_mod;
+            *output = parabolic_sine(-angle) * self.helper.amplitude * audio_rate.amplitude_mod;
         }
     }
 }
 
 struct LFO {
     helper: OscillatorHelper,
-    output: BatchData,
-    quad_output: BatchData,
+    output: [(f64, f64); BATCH_SIZE],
 }
 
 impl LFO {
     fn new(sample_rate: f64) -> Self {
         LFO {
             helper: OscillatorHelper::new(sample_rate),
-            output: [0.0; BATCH_SIZE],
-            quad_output: [0.0; BATCH_SIZE],
+            output: [(0.0, 0.0); BATCH_SIZE],
         }
     }
 
     fn render(&mut self) {
         self.helper.update();
 
-        for (((output, quad_output), modulo), amplitude_mod) in self
-            .output
-            .iter_mut()
-            .zip(self.quad_output.iter_mut())
-            .zip(self.helper.modulo.iter())
-            .zip(self.helper.amplitude_mod.iter())
-        {
-            let angle = modulo * 2.0 * std::f64::consts::PI - std::f64::consts::PI;
-            *output = parabolic_sine(-angle) * self.helper.amplitude * amplitude_mod;
+        for (output, audio_rate) in self.output.iter_mut().zip(self.helper.audio_rate.iter()) {
+            let angle = audio_rate.modulo * 2.0 * std::f64::consts::PI - std::f64::consts::PI;
+            output.0 = parabolic_sine(-angle) * self.helper.amplitude * audio_rate.amplitude_mod;
 
-            let quad_angle = (modulo + 0.25) * 2.0 * std::f64::consts::PI - std::f64::consts::PI;
-            *quad_output = parabolic_sine(-quad_angle) * self.helper.amplitude * amplitude_mod;
+            let quad_angle =
+                (audio_rate.modulo + 0.25) * 2.0 * std::f64::consts::PI - std::f64::consts::PI;
+            output.1 =
+                parabolic_sine(-quad_angle) * self.helper.amplitude * audio_rate.amplitude_mod;
         }
     }
 }
@@ -183,13 +171,34 @@ impl Synth {
         for output_batch in buffer.chunks_exact_mut(BATCH_SIZE) {
             self.lfo.render();
 
-            self.osc1.helper.frequency_mod = self.lfo.output;
-            self.osc2.helper.frequency_mod = self.lfo.output;
+            for (dest, src) in self
+                .osc1
+                .helper
+                .audio_rate
+                .iter_mut()
+                .zip(self.lfo.output.iter())
+            {
+                dest.frequency_mod = src.0;
+            }
+
+            for (dest, src) in self
+                .osc2
+                .helper
+                .audio_rate
+                .iter_mut()
+                .zip(self.lfo.output.iter())
+            {
+                dest.frequency_mod = src.0;
+            }
 
             self.osc1.render();
             self.osc2.render();
 
-            for ((output, osc1_out), osc2_out) in output_batch.iter_mut().zip(self.osc1.output.iter()).zip(self.osc2.output.iter()) {
+            for ((output, osc1_out), osc2_out) in output_batch
+                .iter_mut()
+                .zip(self.osc1.output.iter())
+                .zip(self.osc2.output.iter())
+            {
                 *output = 0.5 * osc1_out + 0.5 * osc2_out;
             }
         }
