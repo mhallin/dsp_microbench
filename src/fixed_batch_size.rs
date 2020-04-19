@@ -40,30 +40,40 @@ impl OscillatorHelper {
         }
     }
 
+    // #[inline(never)]
     fn update(&mut self) {
         let mut last_modulo = self.last_modulo;
-        for (((out_modulo, out_wrap_modulo), input_mod), freq_mod) in self
+
+        let const_offset =
+            self.octave_offset * 12.0 + self.semitone_offset + self.cent_offset / 100.0;
+
+        let pitch_shift = {
+            let mut pitch_shift = [0.0; BATCH_SIZE];
+            for (pitch_shift, freq_mod) in pitch_shift.iter_mut().zip(self.frequency_mod.iter()) {
+                *pitch_shift = pitch_shift_multiplier(freq_mod + const_offset);
+            }
+            pitch_shift
+        };
+
+        let freq_data = {
+            let mut freq_data = [0.0; BATCH_SIZE];
+            for ((freq_data, pitch_shift), input_mod) in freq_data
+                .iter_mut()
+                .zip(pitch_shift.iter())
+                .zip(self.input_frequency_mod_ratio.iter())
+            {
+                *freq_data = self.input_frequency * input_mod * pitch_shift;
+            }
+            freq_data
+        };
+
+        for ((out_modulo, out_wrap_modulo), freq) in self
             .modulo
             .iter_mut()
             .zip(self.wrap_modulo.iter_mut())
-            .zip(self.input_frequency_mod_ratio.iter())
-            .zip(self.frequency_mod.iter())
+            .zip(freq_data.iter())
         {
-            let mut freq = self.input_frequency
-                * input_mod
-                * pitch_shift_multiplier(
-                    freq_mod
-                        + self.octave_offset * 12.0
-                        + self.semitone_offset
-                        + self.cent_offset / 100.0,
-                );
-
-            if freq > OSC_MAX_FREQ {
-                freq = OSC_MAX_FREQ;
-            } else if freq < -OSC_MAX_FREQ {
-                freq = -OSC_MAX_FREQ;
-            }
-
+            let freq = (*freq).max(-OSC_MAX_FREQ).min(OSC_MAX_FREQ);
             let phase_incr = freq / self.sample_rate;
 
             let wrap = (phase_incr > 0.0 && last_modulo >= 1.0)
@@ -91,6 +101,7 @@ impl BandLimitedOscillator {
         }
     }
 
+    // #[inline(never)]
     fn render(&mut self) {
         self.helper.update();
 
@@ -121,6 +132,7 @@ impl LFO {
         }
     }
 
+    // #[inline(never)]
     fn render(&mut self) {
         self.helper.update();
 
@@ -141,21 +153,11 @@ impl LFO {
 }
 
 fn pitch_shift_multiplier(x: f64) -> f64 {
-    if x != 0.0 {
-        2.0f64.powf(x / 12.0)
-    } else {
-        1.0
-    }
+    2.0f64.powf(x / 12.0)
 }
 
-fn wrap_modulo(mut x: f64) -> f64 {
-    while x >= 1.0 {
-        x -= 1.0;
-    }
-    while x < 0.0 {
-        x += 1.0;
-    }
-    x
+fn wrap_modulo(x: f64) -> f64 {
+    x.rem_euclid(1.0)
 }
 
 fn parabolic_sine(x: f64) -> f64 {
@@ -173,44 +175,46 @@ fn parabolic_sine(x: f64) -> f64 {
 
 pub struct Synth {
     osc1: BandLimitedOscillator,
-    osc2: BandLimitedOscillator,
-    lfo: LFO,
+    // osc2: BandLimitedOscillator,
+    // lfo: LFO,
 }
 
 impl Synth {
     pub fn new(sample_rate: f64) -> Self {
         let mut synth = Synth {
             osc1: BandLimitedOscillator::new(sample_rate),
-            osc2: BandLimitedOscillator::new(sample_rate),
-            lfo: LFO::new(sample_rate),
+            // osc2: BandLimitedOscillator::new(sample_rate),
+            // lfo: LFO::new(sample_rate),
         };
 
         synth.osc1.helper.input_frequency = 440.0;
-        synth.osc2.helper.input_frequency = 440.0;
+        // synth.osc2.helper.input_frequency = 440.0;
 
-        synth.osc2.helper.cent_offset = 2.5;
+        // synth.osc2.helper.cent_offset = 2.5;
 
-        synth.lfo.helper.input_frequency = 0.5;
+        // synth.lfo.helper.input_frequency = 0.5;
 
         synth
     }
 
+    #[inline(never)]
     pub fn render(&mut self, buffer: &mut [f64]) {
         for output_batch in buffer.chunks_mut(BATCH_SIZE) {
-            self.lfo.render();
+            // self.lfo.render();
 
-            self.osc1.helper.frequency_mod = self.lfo.output;
-            self.osc2.helper.frequency_mod = self.lfo.output;
+            // self.osc1.helper.frequency_mod = self.lfo.output;
+            // self.osc2.helper.frequency_mod = self.lfo.output;
 
             self.osc1.render();
-            self.osc2.render();
+            // self.osc2.render();
 
-            for ((output, osc1_out), osc2_out) in output_batch
+            for ((output, osc1_out)) in output_batch
                 .iter_mut()
                 .zip(self.osc1.output.iter())
-                .zip(self.osc2.output.iter())
+                // .zip(self.osc2.output.iter())
             {
-                *output = 0.5 * osc1_out + 0.5 * osc2_out;
+                // *output = 0.5 * osc1_out + 0.5 * osc2_out;
+                *output = *osc1_out;
             }
         }
     }

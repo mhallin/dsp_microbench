@@ -10,6 +10,12 @@ harness = false
 
 [dependencies]
 plotters = "0.2"
+criterion = "0.3"
 
 [dev-dependencies]
-criterion = "0.3"
+
+[profile.release.package."*"]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
