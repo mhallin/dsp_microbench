@@ -2,6 +2,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 #[derive(Copy, Clone)]
 struct AOSIncrementerData {
+    phase_increment: f64,
     phase: f64,
     output: f64,
 }
@@ -15,6 +16,7 @@ impl AOSIncrementer {
     fn new() -> Self {
         AOSIncrementer {
             data: [AOSIncrementerData {
+                phase_increment: 0.25,
                 phase: 0.0,
                 output: 0.0,
             }; 64],
@@ -27,7 +29,7 @@ impl AOSIncrementer {
         for data in self.data.iter_mut() {
             data.phase = self.last_phase;
             data.output = parabolic_sine(-2.0 * data.phase * std::f64::consts::PI);
-            self.last_phase += 0.25;
+            self.last_phase += data.phase_increment;
         }
     }
 
@@ -43,6 +45,7 @@ impl AOSIncrementer {
 }
 
 pub struct BatchIncrementer {
+    phase_increment: [f64; 64],
     phase: [f64; 64],
     output: [f64; 64],
     last_phase: f64,
@@ -51,6 +54,7 @@ pub struct BatchIncrementer {
 impl BatchIncrementer {
     fn new() -> Self {
         BatchIncrementer {
+            phase_increment: [0.25; 64],
             phase: [0.0; 64],
             output: [0.0; 64],
             last_phase: 0.0,
@@ -59,9 +63,9 @@ impl BatchIncrementer {
 
     #[inline(never)]
     fn render_phase_batch(&mut self) {
-        for v in self.phase.iter_mut() {
+        for (v, incr) in self.phase.iter_mut().zip(self.phase_increment.iter()) {
             *v = self.last_phase;
-            self.last_phase += 0.25;
+            self.last_phase += incr;
             self.last_phase = self.last_phase.rem_euclid(1.0);
         }
     }
@@ -82,19 +86,23 @@ impl BatchIncrementer {
     }
 }
 
-pub struct Incrementer {
+pub struct PerFrameIncrementer {
     last_phase: f64,
+    phase_increment: f64,
 }
 
-impl Incrementer {
+impl PerFrameIncrementer {
     fn new() -> Self {
-        Incrementer { last_phase: 0.0 }
+        PerFrameIncrementer {
+            last_phase: 0.0,
+            phase_increment: 0.25,
+        }
     }
 
     #[inline(never)]
     fn render_phase_value(&mut self) -> f64 {
         let v = self.last_phase;
-        self.last_phase += 0.25;
+        self.last_phase += self.phase_increment;
         self.last_phase = self.last_phase.rem_euclid(1.0);
         v
     }
@@ -129,7 +137,7 @@ fn dsp_bench(c: &mut Criterion) {
             size,
             |b, size| {
                 b.iter_with_setup(
-                    || (vec![0.0f64; *size], Incrementer::new()),
+                    || (vec![0.0f64; *size], PerFrameIncrementer::new()),
                     |(mut data, mut incrementer)| {
                         incrementer.render(&mut data);
                         data
