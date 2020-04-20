@@ -91,7 +91,7 @@ impl BandLimitedOscillator {
     fn render(&mut self) -> f64 {
         self.helper.check_wrap_modulo();
 
-        let modulo = (self.helper.modulo + self.helper.phase_mod).rem_euclid(1.0);
+        let modulo = wrap01(self.helper.modulo + self.helper.phase_mod);
 
         let out: f64;
 
@@ -161,6 +161,14 @@ fn parabolic_sine(x: f64) -> f64 {
     y = P * (y * y.abs() - y) + y;
 
     y
+}
+
+fn wrap01(x: f64) -> f64 {
+    if x >= 0.0 && x <= 1.0 {
+        x
+    } else {
+        x.rem_euclid(1.0)
+    }
 }
 
 pub struct Synth {
