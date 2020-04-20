@@ -47,6 +47,14 @@ impl OscillatorHelper {
         }
     }
 
+    fn set_frequency_mod<I: Iterator<Item = f64>>(&mut self, iter: I) {
+        self.audio_rate
+            .iter_mut()
+            .map(|d| &mut d.frequency_mod)
+            .zip(iter)
+            .for_each(|(dest, src)| *dest = src);
+    }
+
     fn update(&mut self) {
         let const_offset =
             self.octave_offset * 12.0 + self.semitone_offset + self.cent_offset / 100.0;
@@ -171,25 +179,12 @@ impl Synth {
         for output_batch in buffer.chunks_exact_mut(BATCH_SIZE) {
             self.lfo.render();
 
-            for (dest, src) in self
-                .osc1
+            self.osc1
                 .helper
-                .audio_rate
-                .iter_mut()
-                .zip(self.lfo.output.iter())
-            {
-                dest.frequency_mod = src.0;
-            }
-
-            for (dest, src) in self
-                .osc2
+                .set_frequency_mod(self.lfo.output.iter().map(|(out, _)| *out));
+            self.osc2
                 .helper
-                .audio_rate
-                .iter_mut()
-                .zip(self.lfo.output.iter())
-            {
-                dest.frequency_mod = src.0;
-            }
+                .set_frequency_mod(self.lfo.output.iter().map(|(out, _)| *out));
 
             self.osc1.render();
             self.osc2.render();
