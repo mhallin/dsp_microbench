@@ -1,3 +1,5 @@
+use crate::fastmath::{parabolic_sine, wrap01, exp2};
+
 const OSC_MAX_FREQ: f64 = 20480.0;
 
 const BATCH_SIZE: usize = 64;
@@ -55,6 +57,7 @@ impl OscillatorHelper {
             .for_each(|(dest, src)| *dest = src);
     }
 
+    #[inline(never)]
     fn update(&mut self) {
         let const_offset =
             self.octave_offset * 12.0 + self.semitone_offset + self.cent_offset / 100.0;
@@ -62,7 +65,7 @@ impl OscillatorHelper {
         for audio_rate in self.audio_rate.iter_mut() {
             let frequency = (self.input_frequency
                 * audio_rate.input_frequency_mod_ratio
-                * 2.0f64.powf(audio_rate.frequency_mod + const_offset))
+                * exp2(audio_rate.frequency_mod + const_offset))
             .max(-OSC_MAX_FREQ)
             .min(OSC_MAX_FREQ);
 
@@ -135,27 +138,6 @@ impl LFO {
             output.1 =
                 parabolic_sine(-quad_angle) * self.helper.amplitude * audio_rate.amplitude_mod;
         }
-    }
-}
-
-fn parabolic_sine(x: f64) -> f64 {
-    use std::f64::consts::PI;
-
-    const B: f64 = 4.0 / PI;
-    const C: f64 = -4.0 / (PI * PI);
-    const P: f64 = 0.225;
-    let mut y = B * x + C * x * x.abs();
-
-    y = P * (y * y.abs() - y) + y;
-
-    y
-}
-
-fn wrap01(x: f64) -> f64 {
-    if x >= 0.0 && x <= 1.0 {
-        x
-    } else {
-        x.rem_euclid(1.0)
     }
 }
 

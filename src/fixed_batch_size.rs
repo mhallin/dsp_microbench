@@ -1,3 +1,5 @@
+use crate::fastmath::{exp2, parabolic_sine, wrap01};
+
 const OSC_MAX_FREQ: f64 = 20480.0;
 
 const BATCH_SIZE: usize = 64;
@@ -54,7 +56,7 @@ impl OscillatorHelper {
         {
             let frequency = (self.input_frequency
                 * input_frequency_mod_ratio
-                * 2.0f64.powf(frequency_mod + const_offset))
+                * exp2(frequency_mod + const_offset))
             .max(-OSC_MAX_FREQ)
             .min(OSC_MAX_FREQ);
 
@@ -142,27 +144,6 @@ impl LFO {
     }
 }
 
-fn parabolic_sine(x: f64) -> f64 {
-    use std::f64::consts::PI;
-
-    const B: f64 = 4.0 / PI;
-    const C: f64 = -4.0 / (PI * PI);
-    const P: f64 = 0.225;
-    let mut y = B * x + C * x * x.abs();
-
-    y = P * (y * y.abs() - y) + y;
-
-    y
-}
-
-fn wrap01(x: f64) -> f64 {
-    if x >= 0.0 && x <= 1.0 {
-        x
-    } else {
-        x.rem_euclid(1.0)
-    }
-}
-
 pub struct Synth {
     osc1: BandLimitedOscillator,
     osc2: BandLimitedOscillator,
@@ -197,7 +178,11 @@ impl Synth {
             self.osc1.render();
             self.osc2.render();
 
-            for ((output, osc1_out), osc2_out) in output_batch.iter_mut().zip(self.osc1.output.iter()).zip(self.osc2.output.iter()) {
+            for ((output, osc1_out), osc2_out) in output_batch
+                .iter_mut()
+                .zip(self.osc1.output.iter())
+                .zip(self.osc2.output.iter())
+            {
                 *output = 0.5 * osc1_out + 0.5 * osc2_out;
             }
         }

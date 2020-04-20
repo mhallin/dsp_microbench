@@ -1,3 +1,5 @@
+use crate::fastmath::{exp2, parabolic_sine, wrap01};
+
 const OSC_MAX_FREQ: f64 = 20480.0;
 
 struct OscillatorHelper {
@@ -40,7 +42,7 @@ impl OscillatorHelper {
     fn update(&mut self) {
         self.computed_frequency = self.input_frequency
             * self.input_frequency_mod_ratio
-            * 2.0f64.powf(
+            * exp2(
                 self.frequency_mod
                     + self.octave_offset * 12.0
                     + self.semitone_offset
@@ -150,27 +152,6 @@ impl LFO {
     }
 }
 
-fn parabolic_sine(x: f64) -> f64 {
-    use std::f64::consts::PI;
-
-    const B: f64 = 4.0 / PI;
-    const C: f64 = -4.0 / (PI * PI);
-    const P: f64 = 0.225;
-    let mut y = B * x + C * x * x.abs();
-
-    y = P * (y * y.abs() - y) + y;
-
-    y
-}
-
-fn wrap01(x: f64) -> f64 {
-    if x >= 0.0 && x <= 1.0 {
-        x
-    } else {
-        x.rem_euclid(1.0)
-    }
-}
-
 pub struct Synth {
     osc1: BandLimitedOscillator,
     osc2: BandLimitedOscillator,
@@ -187,7 +168,7 @@ impl Synth {
 
         synth.osc1.helper.input_frequency = 440.0;
         synth.osc2.helper.input_frequency = 440.0;
-        
+
         synth.osc2.helper.cent_offset = 2.5;
 
         synth.lfo.helper.input_frequency = 0.5;
@@ -195,7 +176,7 @@ impl Synth {
         synth
     }
 
-    pub fn render(&mut self, buffer: &mut [f64]) {        
+    pub fn render(&mut self, buffer: &mut [f64]) {
         for output in buffer {
             self.lfo.update();
             let (lfo_out, _) = self.lfo.render();
