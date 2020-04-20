@@ -90,7 +90,7 @@ impl BatchIncrementer {
         for (v, incr) in self.phase.iter_mut().zip(self.phase_increment.iter()) {
             *v = self.last_phase;
             self.last_phase += incr;
-            self.last_phase = self.last_phase.rem_euclid(1.0);
+            self.last_phase = wrap01(self.last_phase);
         }
     }
 
@@ -157,7 +157,7 @@ impl PerFrameIncrementer {
     fn render_phase_value(&mut self) -> f64 {
         let v = self.last_phase;
         self.last_phase += self.phase_increment;
-        self.last_phase = self.last_phase.rem_euclid(1.0);
+        self.last_phase = wrap01(self.last_phase);
         v
     }
 
@@ -205,6 +205,14 @@ fn parabolic_sine(x: f64) -> f64 {
     y = P * (y * y.abs() - y) + y;
 
     y
+}
+
+fn wrap01(x: f64) -> f64 {
+    if x >= 0.0 && x <= 1.0 {
+        x
+    } else {
+        x.rem_euclid(1.0)
+    }
 }
 
 fn dsp_mini_bench(c: &mut Criterion) {

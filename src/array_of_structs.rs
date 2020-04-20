@@ -103,7 +103,7 @@ impl BandLimitedOscillator {
         self.helper.update();
 
         for (output, audio_rate) in self.output.iter_mut().zip(self.helper.audio_rate.iter()) {
-            let modulo = (audio_rate.modulo + audio_rate.phase_mod).rem_euclid(1.0);
+            let modulo = wrap01(audio_rate.modulo + audio_rate.phase_mod);
             let angle = modulo * 2.0 * std::f64::consts::PI - std::f64::consts::PI;
             *output = parabolic_sine(-angle) * self.helper.amplitude * audio_rate.amplitude_mod;
         }
@@ -149,6 +149,14 @@ fn parabolic_sine(x: f64) -> f64 {
     y = P * (y * y.abs() - y) + y;
 
     y
+}
+
+fn wrap01(x: f64) -> f64 {
+    if x >= 0.0 && x <= 1.0 {
+        x
+    } else {
+        x.rem_euclid(1.0)
+    }
 }
 
 pub struct Synth {
