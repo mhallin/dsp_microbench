@@ -20,6 +20,7 @@ pub fn wrap01(x: f64) -> f64 {
 }
 
 // https://github.com/akohlmey/fastermath/blob/master/src/exp.c
+#[cfg(not(target_os="macos"))]
 pub fn exp2(mut x: f64) -> f64 {
     #[repr(align(32))]
     struct Aligned<T>(T);
@@ -58,4 +59,9 @@ pub fn exp2(mut x: f64) -> f64 {
     x = 1.0 + 2.0 * (px / (qx - px));
 
     unsafe { epart.f * x }
+}
+
+#[cfg(target_os="macos")]
+pub fn exp2(x: f64) -> f64 {
+    2.0f64.powf(x)
 }
